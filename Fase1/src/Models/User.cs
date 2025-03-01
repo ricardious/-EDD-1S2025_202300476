@@ -1,4 +1,5 @@
 using System;
+using AutoGestPro.src.Utils;
 
 namespace AutoGestPro.src.Models
 {
@@ -59,29 +60,13 @@ namespace AutoGestPro.src.Models
             ID = id;
             
             // Copy input strings into fixed-size character arrays
-            fixed (char* ptr = Nombres) { CopyString(ptr, firstName); }
-            fixed (char* ptr = Apellidos) { CopyString(ptr, lastName); }
-            fixed (char* ptr = Correo) { CopyString(ptr, email); }
-            fixed (char* ptr = Contrasenia) { CopyString(ptr, password); }
+            fixed (char* ptr = Nombres) { StringUtils.CopyToFixedBuffer(ptr, firstName, 50); }
+            fixed (char* ptr = Apellidos) { StringUtils.CopyToFixedBuffer(ptr, lastName, 50); }
+            fixed (char* ptr = Correo) { StringUtils.CopyToFixedBuffer(ptr, email, 50); }
+            fixed (char* ptr = Contrasenia) { StringUtils.CopyToFixedBuffer(ptr, password, 50); }
             
             Next = null;
         }
 
-        /// <summary>
-        /// Copies a string into a fixed-size character array, ensuring null termination.
-        /// </summary>
-        /// <param name="destination">Pointer to the destination character array.</param>
-        /// <param name="source">The source string to copy.</param>
-        private static void CopyString(char* destination, string source)
-        {
-            // Copy characters from source to destination with a limit of 49 characters
-            for (int i = 0; i < source.Length && i < 50; i++)
-            {
-                destination[i] = source[i];
-            }
-            
-            // Ensure null termination to avoid buffer overflow issues
-            destination[Math.Min(source.Length, 49)] = '\0';
-        }
     }
 }
