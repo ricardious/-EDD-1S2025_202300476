@@ -18,7 +18,7 @@ using AutoGestPro.src.UI.Common;
 
 namespace AutoGestPro.src.UI.Windows
 {
-    public unsafe class MainWindow : Window
+    public class MainWindow : Window
     {
         // Data structures
         private readonly UserList userList;
