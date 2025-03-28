@@ -186,28 +186,28 @@ namespace AutoGestPro.src.UI.Windows
             mainStack.AddTitled(reportsView, "reports", "Reports and Charts");
         }
 
-    private void DisplayMessage(object sender, MessageEventArgs args)
+        private void DisplayMessage(object sender, MessageEventArgs args)
         {
-            Application.Invoke(delegate {
-                try {
-                    // Create and show dialog - use args.MessageType directly since it's already Gtk.MessageType
-                    using (MessageDialog dialog = new MessageDialog(
+            Application.Invoke(delegate
+            {
+                try
+                {
+                    var dialog = new MessageDialog(
                         this,
                         DialogFlags.Modal,
                         args.MessageType,
                         ButtonsType.Ok,
-                        args.Message))
-                    {
-                        dialog.Run();
-                        dialog.Destroy();
-                    }
+                        args.Message);
+
+                    dialog.Run();
+                    dialog.Destroy();
                 }
-                catch (Exception ex) {
+                catch (Exception ex)
+                {
                     Console.WriteLine($"Error displaying message: {ex.Message}");
                 }
             });
         }
 
     }
-
 }
