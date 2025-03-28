@@ -4,11 +4,11 @@ using Gtk;
 using Newtonsoft.Json.Linq;
 using AutoGestPro.src.UI.Common;
 using AutoGestPro.src.Services;
-using System.Linq;
+
 
 namespace AutoGestPro.src.UI.Views
 {
-    public unsafe class BulkLoadView : Box
+    public class BulkLoadView : Box
     {
         // Private fields for services
         private readonly UserService userService;
@@ -59,15 +59,17 @@ namespace AutoGestPro.src.UI.Views
             Label lblType = new("Entity type:");
             selectionBox.PackStart(lblType, false, false, 0);
 
-            cmbEntityType = [];
+            cmbEntityType = new ComboBoxText();
             cmbEntityType.AppendText("Users");
             cmbEntityType.AppendText("Vehicles");
             cmbEntityType.AppendText("Spare Parts");
             cmbEntityType.Active = 0;
             selectionBox.PackStart(cmbEntityType, false, false, 0);
+            cmbEntityType.TooltipText = "Choose the type of data you want to import.";
 
             btnSelectFile = new Button("Select JSON file");
             btnSelectFile.Clicked += SelectFile_Clicked;
+            btnSelectFile.TooltipText = "Select a .json file with entity data to preview and load.";
             selectionBox.PackStart(btnSelectFile, false, false, 10);
 
             lblLoadStatus = new Label("No file selected");
@@ -102,38 +104,69 @@ namespace AutoGestPro.src.UI.Views
             btnLoadData.StyleContext.AddClass("suggested-action");
             btnLoadData.Sensitive = false;
             btnLoadData.Clicked += LoadData_Clicked;
+            btnLoadData.TooltipText = "Load the selected data into the system.";
             actionsBox.PackStart(btnLoadData, false, false, 0);
         }
 
         private void SelectFile_Clicked(object sender, EventArgs e)
         {
-            Window parentWindow = this.Toplevel as Window;
-            FileChooserDialog dialog = new("Select JSON File", parentWindow,
-                FileChooserAction.Open,
-                "Cancel", ResponseType.Cancel,
-                "Select", ResponseType.Accept);
-
-            dialog.Response += (s, args) =>
+            Window parentWindow = Toplevel as Window;
+            if (parentWindow == null)
             {
-                if ((ResponseType)args.ResponseId == ResponseType.Accept)
+                OnShowMessage("Error: No se puede obtener la ventana principal", MessageType.Error);
+                return;
+            }
+
+            FileChooserDialog dialog = null;
+            try
+            {
+                dialog = new FileChooserDialog(
+                    "Select JSON File",
+                    parentWindow,
+                    FileChooserAction.Open,
+                    "Cancel", ResponseType.Cancel,
+                    "Select", ResponseType.Accept
+                );
+
+                dialog.Filter = new FileFilter { Name = "JSON files" };
+                dialog.Filter.AddPattern("*.json");
+        
+                if (dialog.Run() == (int)ResponseType.Accept)
                 {
                     selectedFilePath = dialog.Filename;
-                    lblLoadStatus.Text = $"Selected file: {selectedFilePath}";
-
-                    string json = File.ReadAllText(selectedFilePath);
-                    txtPreview.Buffer.Text = json;
+                    lblLoadStatus.Text = $"Selected File: {System.IO.Path.GetFileName(selectedFilePath)}";
+                    txtPreview.Buffer.Text = File.ReadAllText(selectedFilePath);
                     btnLoadData.Sensitive = true;
                 }
-                dialog.Destroy();
-            };
-
-            dialog.Run();
+            }
+            catch (Exception ex)
+            {
+                OnShowMessage($"Error opening dialog: {ex.Message}", MessageType.Error);
+            }
+            finally
+            {
+                dialog?.Destroy();
+            }
         }
 
         private void LoadData_Clicked(object sender, EventArgs e)
         {
             try
             {
+                if (string.IsNullOrEmpty(selectedFilePath) || !File.Exists(selectedFilePath))
+                {
+                    OnShowMessage("No valid file selected.", MessageType.Error);
+                    return;
+                }
+
+                string entityType = cmbEntityType.ActiveText;
+
+                if (string.IsNullOrEmpty(entityType))
+                {
+                    OnShowMessage("Please select an entity type.", MessageType.Warning);
+                    return;
+                }
+
                 // Show loading indicator
                 lblLoadStatus.Text = "Processing...";
 
@@ -159,7 +192,6 @@ namespace AutoGestPro.src.UI.Views
                 }
 
                 // Validate JSON structure based on selected entity type
-                string entityType = cmbEntityType.ActiveText;
                 if (!ValidateJsonStructure(selectedFilePath, entityType))
                 {
                     OnShowMessage($"The file does not have the correct structure for {entityType}.", MessageType.Error);
@@ -192,8 +224,8 @@ namespace AutoGestPro.src.UI.Views
         {
             try
             {
-                using (StreamReader streamReader = new StreamReader(jsonFilePath))
-                using (Newtonsoft.Json.JsonTextReader reader = new Newtonsoft.Json.JsonTextReader(reader: streamReader))
+                using (var streamReader = new StreamReader(jsonFilePath))
+                using (var reader = new Newtonsoft.Json.JsonTextReader(streamReader))
                 {
                     // Check if file starts with an array
                     if (!reader.Read() || reader.TokenType != Newtonsoft.Json.JsonToken.StartArray)
@@ -210,7 +242,7 @@ namespace AutoGestPro.src.UI.Views
                     }
 
                     // Load the first object to check its structure
-                    JObject firstItem = JObject.Load(reader);
+                    var firstItem = JObject.Load(reader);
 
                     // Check required fields based on entity type
                     switch (entityType)
@@ -263,185 +295,140 @@ namespace AutoGestPro.src.UI.Views
             }
             return true;
         }
-        private void LoadUsers(string jsonFilePath)
+        private unsafe void LoadUsers(string jsonFilePath)
         {
             try
             {
-                using (StreamReader streamReader = new StreamReader(jsonFilePath))
-                using (Newtonsoft.Json.JsonTextReader reader = new Newtonsoft.Json.JsonTextReader(streamReader))
+                var users = JArray.Parse(File.ReadAllText(jsonFilePath));
+                int processedCount = 0;
+                int failedCount = 0;
+
+                foreach (var userObj in users)
                 {
-                    reader.Read(); // Read opening array token
-
-                    int processedCount = 0;
-                    int batchSize = 100;
-                    int batchCount = 0;
-
-                    while (reader.Read())
+                    try
                     {
-                        if (reader.TokenType == Newtonsoft.Json.JsonToken.StartObject)
+                        int id = (int)userObj["ID"];
+                        string firstName = (string)userObj["Nombres"];
+                        string lastName = (string)userObj["Apellidos"];
+                        string email = (string)userObj["Correo"];
+                        string password = (string)userObj["Contrasenia"];
+
+                        // Add additional validation
+                        if (string.IsNullOrWhiteSpace(firstName) ||
+                            string.IsNullOrWhiteSpace(lastName) ||
+                            string.IsNullOrWhiteSpace(email))
                         {
-                            JObject obj = JObject.Load(reader);
+                            throw new ArgumentException("Invalid user data");
+                        }
 
-                            int id = (int)obj["ID"];
-                            string firstName = (string)obj["Nombres"];
-                            string lastName = (string)obj["Apellidos"];
-                            string email = (string)obj["Correo"];
-                            string password = (string)obj["Contrasenia"];
-
-                            if (userService.GetUserById(id) == null)
-                            {
-                                userService.CreateUser(id, firstName, lastName, email, password);
-                            }
-
+                        if (userService.GetUserById(id) == null)
+                        {
+                            userService.CreateUser(id, firstName, lastName, email, password);
                             processedCount++;
-                            batchCount++;
-
-                            if (batchCount >= batchSize)
-                            {
-                                Application.Invoke((s, e) =>
-                                {
-                                    lblLoadStatus.Text = $"Processed {processedCount} users...";
-                                    while (Application.EventsPending())
-                                        Application.RunIteration();
-                                });
-
-                                batchCount = 0;
-                                GC.Collect();
-                                GC.WaitForPendingFinalizers();
-                            }
-
-                            obj = null;
+                        }
+                        else
+                        {
+                            failedCount++;
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        Console.WriteLine($"[Warning] Skipping invalid user: {ex.Message}");
+                    }
 
-                    OnShowMessage($"Users loaded successfully: {processedCount} items", MessageType.Info);
+                    if (processedCount % 100 == 0)
+                    {
+                        UpdateLoadStatus($"Processed {processedCount} users...");
+                    }
                 }
+
+                OnShowMessage($"Users loaded: {processedCount} successful, {failedCount} skipped.", MessageType.Info);
             }
             catch (Exception ex)
             {
                 OnShowMessage($"Error loading users: {ex.Message}", MessageType.Error);
             }
         }
-
-        private void LoadVehicles(string jsonFilePath)
+        
+        private void UpdateLoadStatus(string message)
+        {
+            Application.Invoke((sender, e) =>
+            {
+                lblLoadStatus.Text = message;
+            });
+        }
+        
+        private unsafe void LoadVehicles(string jsonFilePath)
         {
             try
             {
-                // Stream the vehicles file like you do with users and spare parts
-                using (StreamReader streamReader = new StreamReader(jsonFilePath))
-                using (Newtonsoft.Json.JsonTextReader reader = new Newtonsoft.Json.JsonTextReader(streamReader))
+                var vehicles = JArray.Parse(File.ReadAllText(jsonFilePath));
+                int processedCount = 0;
+                int failedCount = 0;
+
+                foreach (var vehicleObj in vehicles)
                 {
-                    reader.Read(); // Read opening array token
-
-                    int processedCount = 0;
-                    int batchSize = 100;
-                    int batchCount = 0;
-
-                    while (reader.Read())
+                    try
                     {
-                        if (reader.TokenType == Newtonsoft.Json.JsonToken.StartObject)
+                        int id = (int)vehicleObj["ID"];
+                        int userId = (int)vehicleObj["ID_Usuario"];
+                        string brand = (string)vehicleObj["Marca"];
+                        string model = (string)vehicleObj["Modelo"];
+                        string plate = (string)vehicleObj["Placa"];
+
+                        if (vehicleService.GetVehicleById(id) == null)
                         {
-                            JObject obj = JObject.Load(reader);
-
-                            int id = (int)obj["ID"];
-                            int userId = (int)obj["ID_Usuario"];
-                            string brand = (string)obj["Marca"];
-                            string model = (string)obj["Modelo"];
-                            string plate = (string)obj["Placa"];
-
-                            if (vehicleService.GetVehicleById(id) == null)
-                            {
-                                vehicleService.CreateVehicle(id, userId, brand, model, plate);
-                            }
-
-                            processedCount++;
-                            batchCount++;
-
-                            if (batchCount >= batchSize)
-                            {
-                                Application.Invoke((s, e) =>
-                                {
-                                    lblLoadStatus.Text = $"Processed {processedCount} vehicles...";
-                                    while (Application.EventsPending())
-                                        Application.RunIteration();
-                                });
-
-                                batchCount = 0;
-                                GC.Collect();
-                                GC.WaitForPendingFinalizers();
-                            }
-
-                            obj = null;
+                            vehicleService.CreateVehicle(id, userId, brand, model, plate);
                         }
+                        processedCount++;
                     }
-
-                    OnShowMessage($"Vehicles loaded successfully: {processedCount} items", MessageType.Info);
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        Console.WriteLine($"[Warning] Skipping invalid vehicle: {ex.Message}");
+                    }
                 }
+
+                OnShowMessage($"Vehicles loaded successfully: {processedCount} items. Skipped: {failedCount} errors.", MessageType.Info);
             }
             catch (Exception ex)
             {
                 OnShowMessage($"Error loading vehicles: {ex.Message}", MessageType.Error);
             }
         }
-        private void LoadSpareParts(string jsonFilePath)
+        
+        private unsafe void LoadSpareParts(string jsonFilePath)
         {
             try
             {
-                // Don't load the full JSON into memory - stream it
-                using (StreamReader streamReader = new StreamReader(selectedFilePath))
-                using (Newtonsoft.Json.JsonTextReader reader = new Newtonsoft.Json.JsonTextReader(streamReader))
+                var spareParts = JArray.Parse(File.ReadAllText(jsonFilePath));
+                int processedCount = 0;
+                int failedCount = 0;
+
+                foreach (var partObj in spareParts)
                 {
-                    // Read the opening array token
-                    reader.Read();
-
-                    int processedCount = 0;
-                    int batchSize = 100;
-                    int batchCount = 0;
-
-                    // Process each JSON object individually
-                    while (reader.Read())
+                    try
                     {
-                        if (reader.TokenType == Newtonsoft.Json.JsonToken.StartObject)
+                        int id = (int)partObj["ID"];
+                        string name = (string)partObj["Repuesto"];
+                        string category = (string)partObj["Detalles"];
+                        double price = (double)partObj["Costo"];
+
+                        if (sparePartsService.Search(id) == null)
                         {
-                            JObject obj = JObject.Load(reader);
-
-                            int id = (int)obj["ID"];
-                            string name = (string)obj["Repuesto"];
-                            string category = (string)obj["Detalles"];
-                            double price = (double)obj["Costo"];
-
-                            if (sparePartsService.Search(id) == null)
-                            {
-                                sparePartsService.CreateSparePart(id, name, category, price);
-                            }
-
-                            processedCount++;
-                            batchCount++;
-
-                            // Update UI periodically and force garbage collection
-                            if (batchCount >= batchSize)
-                            {
-                                Application.Invoke((s, e) =>
-                                {
-                                    lblLoadStatus.Text = $"Processed {processedCount} spare parts...";
-                                    // Process GTK events to keep UI responsive
-                                    while (Application.EventsPending())
-                                        Application.RunIteration();
-                                });
-
-                                batchCount = 0;
-                                // Force garbage collection to reclaim memory
-                                GC.Collect();
-                                GC.WaitForPendingFinalizers();
-                            }
-
-                            // Clear object reference to help garbage collection
-                            obj = null;
+                            sparePartsService.CreateSparePart(id, name, category, price);
                         }
+                        processedCount++;
                     }
-
-                    OnShowMessage($"Spare parts loaded successfully: {processedCount} items", MessageType.Info);
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        Console.WriteLine($"[Warning] Skipping invalid spare part: {ex.Message}");
+                    }
                 }
+
+                OnShowMessage($"Spare parts loaded successfully: {processedCount} items. Skipped: {failedCount} errors.", MessageType.Info);
             }
             catch (Exception ex)
             {
