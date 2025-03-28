@@ -9,16 +9,32 @@ namespace AutoGestPro.src
         [STAThread]
         public static void Main(string[] args)
         {
-            Application.Init();
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                Console.WriteLine($"Unhandled Exception: {e.ExceptionObject}");
+            };
 
-            var app = new Application("org.AutoGestPro.AutoGestPro", GLib.ApplicationFlags.None);
-            app.Register(GLib.Cancellable.Current);
+            try
+            {
+                Application.Init();
 
-            var win = new LoginWindow();
-            app.AddWindow(win);
+                var app = new Application("org.AutoGestPro.AutoGestPro", GLib.ApplicationFlags.None);
+                app.Register(GLib.Cancellable.Current);
 
-            win.Show();
-            Application.Run();
+                var win = new LoginWindow();
+                app.AddWindow(win);
+
+                win.Show();
+                Application.Run();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Fatal Error: {ex.Message}\n{ex.StackTrace}");
+            }
+            finally
+            {
+                Console.WriteLine("Application Exited.");
+            }
         }
     }
 }

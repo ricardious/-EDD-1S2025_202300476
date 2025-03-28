@@ -223,7 +223,9 @@ namespace AutoGestPro.src.UI.Windows
             if (isAuthenticated)
             {
                 // Proceed to the main application window
-                Console.WriteLine("Usuario autenticado");
+                var mainWindow = new MainWindow();
+                mainWindow.Show();
+                Hide();
             }
             else
             {

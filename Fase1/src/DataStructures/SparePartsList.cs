@@ -1,7 +1,7 @@
 using System;
 using AutoGestPro.src.Models;
 
-namespace AutoGestPro.DataStructures
+namespace AutoGestPro.src.DataStructures
 {
     public unsafe class SparePartsList
     {
@@ -91,6 +91,28 @@ namespace AutoGestPro.DataStructures
 
             return false;
         }
+
+        public unsafe SparePart*[] GetSpareParts()
+        {
+            if (head == null)
+                return [];
+
+            int count = GetSize();
+            SparePart*[] spareParts = new SparePart*[count];
+
+            SparePart* current = head;
+            int index = 0;
+
+            do
+            {
+                spareParts[index] = current; // Pointer to the current node
+                current = current->Next;
+                index++;
+            } while (current != head);
+
+            return spareParts;
+        }
+
 
         public string GenerateDot()
         {
